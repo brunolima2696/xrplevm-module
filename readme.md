@@ -62,7 +62,7 @@ comunicar com outros módulos de blockchain e com um relayer IBC standalone.
 O módulo XRPL é responsável por:
 
 - validar os descritores das chains e das contas;
-- gerar o `docker-compose.yaml`;
+- gerar o `docker/docker-compose.yaml`;
 - criar ou validar a rede Docker compartilhada;
 - construir, inicializar e reconciliar as XRPL EVM Sidechains;
 - preservar o estado on-chain em volumes Docker;
@@ -108,7 +108,7 @@ pacote e devolve o acknowledgement.
 # 📂 Estrutura do projeto
 
 ```text
-xrpl-cosmos/
+xrplevm-module/
 ├── config/
 │   ├── profile.json             # características comuns das XRPL EVM
 │   ├── chains.json              # identidade, IP e portas das chains
@@ -121,15 +121,17 @@ xrpl-cosmos/
 │   ├── transfer_to_xrpl.py      # transferência XRPL ↔ XRPL
 │   ├── transfer_to_cosmos.py    # transferência XRPL → Cosmos
 │   ├── check_balance.py         # consulta unificada de saldos
-├── scripts/
-│   └── start-persistent.sh      # inicialização persistente do exrpd
-├── Dockerfile                   # imagem local do XRPL EVM Node
-├── docker-compose.yaml          # Compose gerado pelo módulo
+├── app/                         # submódulo do fork xrplevm-node
+│   └── local-node.sh            # inicialização idempotente e persistente do exrpd
+├── docker/
+│   ├── Dockerfile               # imagem local do XRPL EVM Node
+│   ├── Dockerfile.dockerignore  # contexto ignorado durante o build
+│   └── docker-compose.yaml      # Compose gerado pelo módulo
 ├── .env.example                 # modelo da rede compartilhada
 └── requirements.txt             # dependências dos scripts Python
 ```
 
-O `docker-compose.yaml` é gerado pelo módulo. As fontes declarativas ficam em
+O `docker/docker-compose.yaml` é gerado pelo módulo. As fontes declarativas ficam em
 `config/` e devem ser alteradas em vez de editar diretamente o Compose.
 
 [⬆️ Voltar ao topo](#topo)
@@ -159,6 +161,7 @@ DOCKER_SUBNET=172.30.0.0/24
 DOCKER_GATEWAY=172.30.0.1
 
 YUI_RELAYER_CONTAINER=yui-relayer
+YUI_RELAYER_RUNTIME=../yui-relayer/runtime
 ```
 
 `YUI_RELAYER_CONTAINER` é usado apenas pelos testes que precisam consultar os
@@ -174,8 +177,8 @@ paths do relayer já configurado.
 ## 1. Clonar o módulo XRPL
 
 ```bash
-git clone https://github.com/brunolima2696/xrpl-cosmos.git
-cd xrpl-cosmos
+git clone --recurse-submodules https://github.com/brunolima2696/xrplevm-module.git
+cd xrplevm-module
 ```
 
 O YUI Relayer é um módulo standalone e não precisa estar dentro deste
@@ -244,15 +247,15 @@ O fluxo executa, conforme o estado encontrado:
 ```bash
 docker compose version
 docker info --format "{{.ServerVersion}}"
-docker compose -f docker-compose.yaml ps --all --quiet <service>
+docker compose -f docker/docker-compose.yaml ps --all --quiet <service>
 docker inspect <container-id>
 docker network inspect interoperability_network
 docker network create --driver bridge \
   --subnet 172.30.0.0/24 \
   --gateway 172.30.0.1 \
   interoperability_network
-docker compose -f docker-compose.yaml build <services>
-docker compose -f docker-compose.yaml up -d --no-build <services>
+docker compose -f docker/docker-compose.yaml build <services>
+docker compose -f docker/docker-compose.yaml up -d --no-build <services>
 ```
 
 A criação da rede, o build e o `up` são condicionais. Ao final, o Python faz
@@ -263,7 +266,7 @@ consultas HTTP aos endpoints RPC, REST e EVM de cada chain.
 O ciclo de inicialização:
 
 1. valida os descritores;
-2. gera `docker-compose.yaml`;
+2. gera `docker/docker-compose.yaml`;
 3. verifica o Docker;
 4. compara o estado desejado com os containers existentes;
 5. cria ou valida `interoperability_network`;
@@ -288,7 +291,7 @@ python src/main.py status
 ```bash
 docker compose version
 docker info --format "{{.ServerVersion}}"
-docker compose -f docker-compose.yaml ps
+docker compose -f docker/docker-compose.yaml ps
 ```
 
 </details>
@@ -304,7 +307,7 @@ python src/main.py logs xrplevm-a --follow
 <summary>Comandos encapsulados</summary>
 
 ```bash
-docker compose -f docker-compose.yaml logs \
+docker compose -f docker/docker-compose.yaml logs \
   --tail 100 \
   --follow \
   xrplevm-a
@@ -330,7 +333,7 @@ Faz o equivalente a:
 
 - Para XRPL EVM A:
 ```bash
-docker compose exec -T xrplevm-a \
+docker compose -f docker/docker-compose.yaml exec -T xrplevm-a \
   /app/bin/exrpd tx bank send \
   alice \
   ethm1ad3lc5tswq7vgc4rqsa0ad9yg5zcsy3f2vgazj \
@@ -350,7 +353,7 @@ docker compose exec -T xrplevm-a \
 - Para XRPL EVM B:
   
 ```bash
-docker compose exec -T xrplevm-b \
+docker compose -f docker/docker-compose.yaml exec -T xrplevm-b \
   /app/bin/exrpd tx bank send \
   alice \
   ethm177zt9jh86mp54zrl9vk2g7q6g69jzvsnl2qt8f \
@@ -442,7 +445,7 @@ python tests/check_balance.py xrplevm-b alice
 
 >[!Note]
 > O script consulta `yui-relayer/runtime/manifest.json` para obter informações das chains.
-> A variável `YUI_RELAYER_RUNTIME` no `.env` deve apontar para o diretório `yui-relayer/runtime`.
+> A variável `YUI_RELAYER_RUNTIME` no `.env` deve apontar para o runtime do módulo YUI standalone. Quando os módulos forem irmãos, use `../yui-relayer/runtime`.
 
 <details>
 <summary>Comandos encapsulados</summary>
@@ -450,7 +453,7 @@ python tests/check_balance.py xrplevm-b alice
 - Consulta Alice XRPL EVM A:
 
 ```bash
-docker compose exec -T xrplevm-a \
+docker compose -f docker/docker-compose.yaml exec -T xrplevm-a \
   /app/bin/exrpd query bank balances \
   ethm1dakgyqjulg29m5fmv992g2y66m9g2mjn6hahwg \
   --node tcp://localhost:26657 \
@@ -460,7 +463,7 @@ docker compose exec -T xrplevm-a \
 - Consulta Alice XRPL EVM B:
 
 ```bash
-docker compose exec -T xrplevm-b \
+docker compose -f docker/docker-compose.yaml exec -T xrplevm-b \
   /app/bin/exrpd query bank balances \
   ethm1dakgyqjulg29m5fmv992g2y66m9g2mjn6hahwg \
   --node tcp://localhost:26657 \
@@ -489,7 +492,7 @@ docker exec yui-relayer yrly paths list --json
 Para descobrir o channel, e na sequência:
 
 ```bash
-docker compose exec -T xrplevm-a \
+docker compose -f docker/docker-compose.yaml exec -T xrplevm-a \
   /app/bin/exrpd tx ibc-transfer transfer \
   transfer <channel-N> \
   ethm1dakgyqjulg29m5fmv992g2y66m9g2mjn6hahwg \
@@ -534,7 +537,7 @@ python tests/check_balance.py xrplevm-b alice
 <summary>Alternativamente:</summary>
 
 ```bash
-docker compose exec -T xrplevm-b \
+docker compose -f docker/docker-compose.yaml exec -T xrplevm-b \
   /app/bin/exrpd query bank balances \
   ethm1dakgyqjulg29m5fmv992g2y66m9g2mjn6hahwg \
   --node tcp://localhost:26657 \
@@ -572,7 +575,7 @@ docker exec yui-relayer yrly paths list --json
 - Para executar a transação:
 
 ```bash
-docker compose exec -T xrplevm-b \
+docker compose -f docker/docker-compose.yaml exec -T xrplevm-b \
   /app/bin/exrpd tx ibc-transfer transfer \
   transfer <channel-N> \
   ethm1dakgyqjulg29m5fmv992g2y66m9g2mjn6hahwg \
@@ -603,7 +606,7 @@ python tests/check_balance.py xrplevm-a alice
 <summary>Comandos encapsulados:</summary>
 
 ```bash
-docker compose exec -T xrplevm-a \
+docker compose -f docker/docker-compose.yaml exec -T xrplevm-a \
   /app/bin/exrpd query bank balances \
   ethm1dakgyqjulg29m5fmv992g2y66m9g2mjn6hahwg \
   --node tcp://localhost:26657 \
@@ -651,7 +654,7 @@ Executa o fluxo de `init`, incluindo inspeção, rede, reconciliação, `docker
 compose up` e healthchecks, mas omite:
 
 ```bash
-docker compose -f docker-compose.yaml build <services>
+docker compose -f docker/docker-compose.yaml build <services>
 ```
 
 A imagem `xrplevm-local:dev` precisa existir localmente.
@@ -717,7 +720,7 @@ python src/main.py init --chain xrplevm-a
 Para derrubar somente as XRPL e preservar o estado on-chain:
 
 ```bash
-docker compose down
+docker compose -f docker/docker-compose.yaml down
 ```
 
 Os volumes nomeados permanecem disponíveis para a próxima inicialização.
@@ -727,10 +730,10 @@ o YUI, não são removidos por esse comando.
 Para remover também os volumes XRPL e reinicializar as chains desde o genesis:
 
 ```bash
-docker compose down -v
+docker compose -f docker/docker-compose.yaml down -v
 ```
 
-> `docker compose down -v` apaga o estado, as transações e os objetos IBC das
+> `docker compose -f docker/docker-compose.yaml down -v` apaga o estado, as transações e os objetos IBC das
 > XRPL locais. Use somente quando quiser recriar as chains.
 
 A rede externa `interoperability_network` não é removida automaticamente pelo
@@ -743,8 +746,8 @@ Compose deste módulo.
 <a id="codigo-fonte"></a>
 # 🔗 Código-fonte
 
-- Módulo XRPL: [brunolima2696/xrpl-cosmos](https://github.com/brunolima2696/xrpl-cosmos)
-- XRPL EVM Node: [xrplevm/node](https://github.com/xrplevm/node)
+- Módulo XRPL: [brunolima2696/xrplevm-module](https://github.com/brunolima2696/xrplevm-module)
+- Fork XRPL EVM Node: [brunolima2696/xrplevm-node](https://github.com/brunolima2696/xrplevm-node)
 - YUI Relayer standalone: [brunolima2696/yui-relayer](https://github.com/brunolima2696/yui-relayer)
 - YUI upstream: [hyperledger-labs/yui-relayer](https://github.com/hyperledger-labs/yui-relayer)
 - Especificação IBC: [cosmos/ibc](https://github.com/cosmos/ibc)

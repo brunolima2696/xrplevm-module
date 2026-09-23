@@ -5,8 +5,8 @@ from dataclasses import asdict
 from .models import Chain
 
 
-CONFIG_HASH_LABEL = "io.xrpl-cosmos.chain-config-hash"
-IDENTITY_HASH_LABEL = "io.xrpl-cosmos.chain-identity-hash"
+CONFIG_HASH_LABEL = "io.xrplevm-module.chain-config-hash"
+IDENTITY_HASH_LABEL = "io.xrplevm-module.chain-identity-hash"
 
 
 def _hash(payload: object) -> str:

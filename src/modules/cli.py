@@ -21,7 +21,7 @@ def _positive_xrp(value: str) -> Decimal:
     return amount
 
 
-DISPLAY_ROOT = "xrpl-cosmos"
+DISPLAY_ROOT = "xrplevm-module"
 
 
 def _add_config_dir(parser: argparse.ArgumentParser, root_dir: Path) -> None:
@@ -46,8 +46,8 @@ def _add_compose_file(parser: argparse.ArgumentParser, root_dir: Path) -> None:
     parser.add_argument(
         "--compose-file",
         type=_path,
-        default=root_dir / "docker-compose.yaml",
-        help=f"Compose (padrao: {DISPLAY_ROOT}/docker-compose.yaml)",
+        default=root_dir / "docker" / "docker-compose.yaml",
+        help=f"Compose (padrao: {DISPLAY_ROOT}/docker/docker-compose.yaml)",
     )
 
 
